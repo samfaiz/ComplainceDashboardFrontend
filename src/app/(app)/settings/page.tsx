@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { MyNotificationsCard } from "@/components/notifications/my-notifications-card";
+import { RolesPermissionsCard } from "@/components/roles-permissions-card";
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -46,6 +48,8 @@ export default function SettingsPage() {
       </div>
 
       <MfaCard />
+      <MyNotificationsCard />
+      <RolesPermissionsCard />
     </div>
   );
 }
@@ -171,14 +175,28 @@ function MfaCard() {
     }
   }
 
+  // Only admins can self-enroll; other users must be flagged by an admin.
+  const canSelfEnroll = !!user?.is_admin || !!user?.mfa_required;
+  const canSelfDisable = !!user?.is_admin;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           Two-Factor Authentication
-          {user?.mfa_enabled ? <Badge variant="success">Enabled</Badge> : <Badge variant="warning">Disabled</Badge>}
+          {user?.mfa_enabled ? (
+            <Badge variant="success">Enabled</Badge>
+          ) : user?.mfa_required ? (
+            <Badge variant="warning">Enrollment required</Badge>
+          ) : (
+            <Badge variant="secondary">Disabled</Badge>
+          )}
         </CardTitle>
-        <CardDescription>Protect your account with a TOTP authenticator app (Google Authenticator, Authy, 1Password).</CardDescription>
+        <CardDescription>
+          {canSelfEnroll
+            ? "Protect your account with a TOTP authenticator app (Google Authenticator, Authy, 1Password)."
+            : "MFA enrollment is controlled by your administrator. Contact them to enable or disable it for your account."}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {recoveryCodes && (
@@ -196,7 +214,13 @@ function MfaCard() {
           </div>
         )}
 
-        {!user?.mfa_enabled && !setup && !recoveryCodes && (
+        {!canSelfEnroll && !user?.mfa_enabled && (
+          <p className="text-xs text-muted-foreground">
+            An administrator has not granted you MFA enrollment. No action is available here.
+          </p>
+        )}
+
+        {canSelfEnroll && !user?.mfa_enabled && !setup && !recoveryCodes && (
           <Button onClick={begin} loading={busy}>
             <ShieldCheck className="h-4 w-4" /> Enable two-factor
           </Button>
@@ -223,7 +247,7 @@ function MfaCard() {
           </div>
         )}
 
-        {user?.mfa_enabled && (
+        {user?.mfa_enabled && canSelfEnroll && (
           <div className="space-y-3 border-t pt-4">
             <Label>Confirm your password for the actions below</Label>
             <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Current password" className="max-w-sm" />
@@ -231,11 +255,24 @@ function MfaCard() {
               <Button variant="outline" loading={busy} disabled={!password} onClick={regenerate}>
                 <KeyRound className="h-4 w-4" /> Regenerate recovery codes
               </Button>
-              <Button variant="destructive" loading={busy} disabled={!password} onClick={disable}>
-                <ShieldOff className="h-4 w-4" /> Disable 2FA
-              </Button>
+              {canSelfDisable && (
+                <Button variant="destructive" loading={busy} disabled={!password} onClick={disable}>
+                  <ShieldOff className="h-4 w-4" /> Disable 2FA
+                </Button>
+              )}
             </div>
+            {!canSelfDisable && (
+              <p className="text-xs text-muted-foreground">
+                Only an administrator can disable MFA for your account.
+              </p>
+            )}
           </div>
+        )}
+
+        {user?.mfa_enabled && !canSelfEnroll && (
+          <p className="text-xs text-muted-foreground">
+            MFA is active. Contact an administrator to reset or disable it.
+          </p>
         )}
       </CardContent>
     </Card>

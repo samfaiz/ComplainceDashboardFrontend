@@ -12,12 +12,21 @@ import { relativeTime, titleCase } from "@/lib/format";
 import type { ApiSource } from "@/lib/types";
 import { PageHeader } from "@/components/page-header";
 import { NoSources } from "@/components/source-bar";
+import { RoleGuard } from "@/components/role-guard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogHeader } from "@/components/ui/dialog";
 
 export default function SourcesPage() {
+  return (
+    <RoleGuard require="manage">
+      <SourcesPageInner />
+    </RoleGuard>
+  );
+}
+
+function SourcesPageInner() {
   const { user } = useAuth();
   const { data: sources, isLoading } = useSources();
   const qc = useQueryClient();

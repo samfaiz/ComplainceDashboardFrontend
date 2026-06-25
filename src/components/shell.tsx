@@ -22,8 +22,8 @@ import { Badge } from "@/components/ui/badge";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/data", label: "Endpoint Data", icon: Table2 },
-  { href: "/sources", label: "API Sources", icon: Plug },
+  { href: "/data", label: "Endpoint Data", icon: Table2, manage: true },
+  { href: "/sources", label: "API Sources", icon: Plug, manage: true },
   { href: "/builder", label: "Customize", icon: SlidersHorizontal, manage: true },
   { href: "/admin", label: "Admin", icon: Users, admin: true },
   { href: "/health", label: "System Health", icon: Activity },

@@ -451,14 +451,14 @@ export function SourceWizard({ existing }: { existing?: ApiSource }) {
 
               <div className="space-y-2">
                 <Label>Refresh interval</Label>
-                <Select value={interval} onChange={(e) => setInterval(Number(e.target.value))} className="max-w-xs">
-                  {intervals.map((m) => (
-                    <option key={m} value={m}>
-                      {m < 60 ? `${m} minutes` : `${m / 60} hour${m / 60 > 1 ? "s" : ""}`}
-                    </option>
-                  ))}
-                </Select>
-                <p className="text-xs text-muted-foreground">How often we pull fresh data from the API.</p>
+                <RefreshIntervalPicker
+                  value={interval}
+                  onChange={setInterval}
+                  presets={intervals}
+                />
+                <p className="text-xs text-muted-foreground">
+                  How often we pull fresh data from the API. Minimum 15 minutes to stay polite to upstream rate limits.
+                </p>
               </div>
 
               <div className="space-y-3">
@@ -529,6 +529,97 @@ export function SourceWizard({ existing }: { existing?: ApiSource }) {
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+function RefreshIntervalPicker({
+  value,
+  onChange,
+  presets,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  presets: number[];
+}) {
+  const MIN = 15;
+  const MAX = 10080; // one week
+  const presetSet = new Set(presets);
+  const startsCustom = !presetSet.has(value);
+  const [mode, setMode] = useState<"preset" | "custom">(startsCustom ? "custom" : "preset");
+  const [draft, setDraft] = useState<string>(String(value));
+
+  function commitCustom(raw: string) {
+    setDraft(raw);
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n)) return;
+    const clamped = Math.min(MAX, Math.max(MIN, n));
+    onChange(clamped);
+  }
+
+  function labelFor(m: number): string {
+    if (m < 60) return `${m} minutes`;
+    if (m % 60 === 0) return `${m / 60} hour${m / 60 > 1 ? "s" : ""}`;
+    return `${Math.round((m / 60) * 10) / 10} hours`;
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-1">
+        <button
+          type="button"
+          onClick={() => setMode("preset")}
+          className={cn(
+            "rounded border px-3 py-1 text-xs",
+            mode === "preset" ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"
+          )}
+        >
+          Preset
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMode("custom");
+            setDraft(String(value));
+          }}
+          className={cn(
+            "rounded border px-3 py-1 text-xs",
+            mode === "custom" ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"
+          )}
+        >
+          Custom
+        </button>
+      </div>
+
+      {mode === "preset" ? (
+        <Select
+          value={presetSet.has(value) ? value : presets[0] ?? MIN}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="max-w-xs"
+        >
+          {presets.map((m) => (
+            <option key={m} value={m}>
+              {labelFor(m)}
+            </option>
+          ))}
+        </Select>
+      ) : (
+        <div className="flex max-w-xs items-center gap-2">
+          <Input
+            type="number"
+            min={MIN}
+            max={MAX}
+            value={draft}
+            onChange={(e) => commitCustom(e.target.value)}
+            className="w-32"
+          />
+          <span className="text-xs text-muted-foreground">minutes (min 15, max 10080)</span>
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Current: every <strong>{labelFor(value)}</strong>.
+      </p>
     </div>
   );
 }

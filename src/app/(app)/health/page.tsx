@@ -10,10 +10,12 @@ import {
   HardDrive,
 } from "lucide-react";
 import { useHealth } from "@/lib/queries";
+import { useAuth } from "@/lib/auth";
 import { relativeTime } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { TechStackPanel } from "@/components/tech-stack-panel";
 
 function Status({ ok, stale }: { ok?: boolean; stale?: boolean }) {
   if (stale) return <Badge variant="warning">Degraded</Badge>;
@@ -57,6 +59,7 @@ function Panel({
 }
 
 export default function HealthPage() {
+  const { user } = useAuth();
   const { data, isLoading } = useHealth();
 
   if (isLoading || !data) {
@@ -115,6 +118,8 @@ export default function HealthPage() {
           <Row label="Online now" value={data.security.online} />
         </Panel>
       </div>
+
+      {user?.is_admin && <TechStackPanel />}
     </div>
   );
 }

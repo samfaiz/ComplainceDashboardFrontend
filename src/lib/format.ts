@@ -48,6 +48,18 @@ export const CHART_PALETTE = [
   "var(--color-chart-5)",
 ];
 
+export const PALETTES: Record<string, string[]> = {
+  default: CHART_PALETTE,
+  ocean: ["#0ea5e9", "#22d3ee", "#2dd4bf", "#0891b2", "#1d4ed8", "#7dd3fc"],
+  sunset: ["#f97316", "#f43f5e", "#a855f7", "#facc15", "#ef4444", "#fb923c"],
+  forest: ["#16a34a", "#65a30d", "#0d9488", "#84cc16", "#15803d", "#4ade80"],
+  mono: ["#94a3b8", "#64748b", "#475569", "#334155", "#1e293b", "#cbd5e1"],
+};
+
+export function paletteFor(name: string | undefined): string[] {
+  return PALETTES[name ?? "default"] ?? CHART_PALETTE;
+}
+
 export function healthBadgeVariant(status: string): "success" | "warning" | "destructive" | "secondary" {
   if (status === "online") return "success";
   if (status === "stale") return "warning";

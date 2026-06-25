@@ -5,16 +5,26 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Circle,
   KeyRound,
+  LayoutDashboard,
   Lock,
   ShieldAlert,
+  ShieldCheck,
   ShieldOff,
+  Trash2,
+  UserMinus,
   UserPlus,
   Copy,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { useToast } from "@/lib/toast";
 import { formatDate, relativeTime } from "@/lib/format";
+import { useAdminDashboards, useUserAssignedDashboards } from "@/lib/queries";
 import type { Role } from "@/lib/types";
+import { MailSettingsTab } from "@/components/notifications/mail-settings-tab";
+import { TemplatesTab } from "@/components/notifications/templates-tab";
+import { NotificationLogsTab } from "@/components/notifications/notification-logs-tab";
+import { RolesPermissionsCard } from "@/components/roles-permissions-card";
 import { PageHeader } from "@/components/page-header";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -33,6 +43,7 @@ interface AdminUser {
   role: Role;
   is_active: boolean;
   mfa_enabled: boolean;
+  mfa_required: boolean;
   ip_flagged: boolean;
   is_online: boolean;
   is_locked: boolean;
@@ -63,14 +74,22 @@ export default function AdminPage() {
         onChange={setTab}
         tabs={[
           { value: "users", label: "Users" },
+          { value: "roles", label: "Roles & Permissions" },
           { value: "logins", label: "Login Activity" },
           { value: "audit", label: "Audit Log" },
+          { value: "mail", label: "Mail Settings" },
+          { value: "templates", label: "Email Templates" },
+          { value: "notif-log", label: "Notification Log" },
         ]}
       />
 
       {tab === "users" && <UsersTab />}
+      {tab === "roles" && <RolesPermissionsCard />}
       {tab === "logins" && <LoginsTab />}
       {tab === "audit" && <AuditTab />}
+      {tab === "mail" && <MailSettingsTab />}
+      {tab === "templates" && <TemplatesTab />}
+      {tab === "notif-log" && <NotificationLogsTab />}
 
       {createOpen && <CreateUserDialog onClose={() => setCreateOpen(false)} />}
     </div>
@@ -237,7 +256,25 @@ function ManageUserDialog({ user, onClose }: { user: AdminUser; onClose: () => v
               <ShieldOff className="h-4 w-4" /> Reset MFA
             </Button>
           )}
+          {!user.mfa_required && !user.mfa_enabled && (
+            <Button variant="outline" size="sm" loading={busy} onClick={() => act(() => api.put(`/api/admin/users/${user.id}/mfa-required`, { required: true }), "MFA enrollment required")}>
+              <ShieldCheck className="h-4 w-4" /> Require MFA
+            </Button>
+          )}
+          {user.mfa_required && !user.mfa_enabled && (
+            <Button variant="outline" size="sm" loading={busy} onClick={() => act(() => api.put(`/api/admin/users/${user.id}/mfa-required`, { required: false }), "MFA requirement removed")}>
+              <ShieldOff className="h-4 w-4" /> Cancel MFA requirement
+            </Button>
+          )}
         </div>
+
+        {user.mfa_required && !user.mfa_enabled && (
+          <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+            User is required to enroll an authenticator on next sign-in.
+          </div>
+        )}
+
+        <DangerZone user={user} onDeleted={onClose} />
 
         {tempPassword && (
           <div className="flex items-center justify-between rounded-lg border border-warning/40 bg-warning/10 p-3">
@@ -250,6 +287,8 @@ function ManageUserDialog({ user, onClose }: { user: AdminUser; onClose: () => v
             </Button>
           </div>
         )}
+
+        <AssignedDashboardsSection user={user} />
 
         <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
           <div>
@@ -283,6 +322,173 @@ function ManageUserDialog({ user, onClose }: { user: AdminUser; onClose: () => v
         </div>
       </div>
     </Dialog>
+  );
+}
+
+function DangerZone({ user, onDeleted }: { user: AdminUser; onDeleted: () => void }) {
+  const { user: me } = useAuth();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [confirmText, setConfirmText] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const isSelf = me?.id === user.id;
+  const expected = user.email;
+
+  async function destroy() {
+    if (confirmText !== expected) return;
+    setBusy(true);
+    try {
+      await api.del(`/api/admin/users/${user.id}`);
+      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      toast({ title: "User deleted", variant: "success" });
+      onDeleted();
+    } catch (e) {
+      toast({
+        title: "Delete failed",
+        description: e instanceof ApiError ? e.message : "Error",
+        variant: "error",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-destructive">
+        <UserMinus className="h-4 w-4" /> Delete user
+      </div>
+      {isSelf ? (
+        <p className="text-xs text-muted-foreground">You cannot delete your own account.</p>
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground">
+            Permanently removes this user and cascades to their owned dashboards, sources, sites, and audit records.
+            Type the email <code className="rounded bg-muted px-1">{expected}</code> to confirm.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder={expected}
+              className="h-8 max-w-xs"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={confirmText !== expected || busy}
+              loading={busy}
+              onClick={destroy}
+              className="border-destructive/40 text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="h-4 w-4" /> Delete permanently
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function AssignedDashboardsSection({ user }: { user: AdminUser }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: assigned, isLoading } = useUserAssignedDashboards(user.id);
+  const { data: available } = useAdminDashboards();
+  const [pick, setPick] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+
+  const ownedByThisUser = new Set((available ?? []).filter((d) => d.owner.id === user.id).map((d) => d.id));
+  const alreadyAssigned = new Set((assigned ?? []).map((d) => d.id));
+  const options = (available ?? []).filter((d) => !ownedByThisUser.has(d.id) && !alreadyAssigned.has(d.id));
+
+  function invalidate() {
+    qc.invalidateQueries({ queryKey: ["admin", "user-dashboards", user.id] });
+    qc.invalidateQueries({ queryKey: ["admin", "audit"] });
+  }
+
+  async function assign() {
+    if (!pick) return;
+    setBusy(true);
+    try {
+      await api.post(`/api/admin/users/${user.id}/dashboards`, { dashboard_id: Number(pick) });
+      toast({ title: "Dashboard assigned", variant: "success" });
+      setPick("");
+      invalidate();
+    } catch (e) {
+      toast({ title: "Assign failed", description: e instanceof ApiError ? e.message : "Error", variant: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function unassign(id: number) {
+    setBusy(true);
+    try {
+      await api.del(`/api/admin/users/${user.id}/dashboards/${id}`);
+      toast({ title: "Dashboard unassigned", variant: "success" });
+      invalidate();
+    } catch (e) {
+      toast({ title: "Unassign failed", description: e instanceof ApiError ? e.message : "Error", variant: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <div className="flex items-center gap-2">
+        <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
+        <p className="text-xs font-medium uppercase text-muted-foreground">Assigned dashboards</p>
+      </div>
+
+      {user.role !== "viewer" && (
+        <p className="rounded border border-warning/40 bg-warning/10 px-2 py-1 text-xs text-warning-foreground">
+          This user&apos;s role is <span className="font-mono">{user.role}</span>; they can build their own dashboards. Assignments are mainly for viewers.
+        </p>
+      )}
+
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Loading…</p>
+      ) : assigned && assigned.length > 0 ? (
+        <ul className="space-y-1.5">
+          {assigned.map((d) => (
+            <li key={d.id} className="flex items-center justify-between rounded border px-2 py-1.5 text-sm">
+              <div>
+                <p className="font-medium">{d.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  by {d.owner.name} · assigned {relativeTime(d.assigned_at)}
+                </p>
+              </div>
+              <Button variant="ghost" size="icon" disabled={busy} onClick={() => unassign(d.id)} title="Unassign">
+                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground">No dashboards assigned yet.</p>
+      )}
+
+      {options.length > 0 ? (
+        <div className="flex gap-2">
+          <Select value={pick} onChange={(e) => setPick(e.target.value)} className="h-9 flex-1">
+            <option value="">Pick a dashboard to assign…</option>
+            {options.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name} — {d.owner.name} ({d.widget_count} widgets)
+              </option>
+            ))}
+          </Select>
+          <Button size="sm" disabled={!pick || busy} onClick={assign}>
+            Assign
+          </Button>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">No additional dashboards available to assign.</p>
+      )}
+    </div>
   );
 }
 
