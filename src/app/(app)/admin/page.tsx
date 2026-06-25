@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Circle,
@@ -41,6 +41,7 @@ interface AdminUser {
   name: string;
   email: string;
   role: Role;
+  manageable?: boolean;
   is_active: boolean;
   mfa_enabled: boolean;
   mfa_required: boolean;
@@ -58,6 +59,22 @@ interface AdminUser {
 export default function AdminPage() {
   const [tab, setTab] = useState("users");
   const [createOpen, setCreateOpen] = useState(false);
+  const [autoUserId, setAutoUserId] = useState<number | null>(null);
+
+  const { data: requests } = useQuery({
+    queryKey: ["admin", "reset-requests"],
+    queryFn: () => api.get<{ requests: ResetRequest[] }>("/api/admin/reset-requests").then((r) => r.requests),
+  });
+  const pending = requests?.length ?? 0;
+
+  // Deep link from a notification email: /admin?user=ID opens that user to reset.
+  useEffect(() => {
+    const uid = Number(new URLSearchParams(window.location.search).get("user"));
+    if (uid) {
+      setAutoUserId(uid);
+      setTab("users");
+    }
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -74,6 +91,7 @@ export default function AdminPage() {
         onChange={setTab}
         tabs={[
           { value: "users", label: "Users" },
+          { value: "requests", label: pending > 0 ? `Requests (${pending})` : "Requests" },
           { value: "roles", label: "Roles & Permissions" },
           { value: "logins", label: "Login Activity" },
           { value: "audit", label: "Audit Log" },
@@ -83,7 +101,8 @@ export default function AdminPage() {
         ]}
       />
 
-      {tab === "users" && <UsersTab />}
+      {tab === "users" && <UsersTab autoSelectId={autoUserId} onConsumed={() => setAutoUserId(null)} />}
+      {tab === "requests" && <RequestsTab onManage={(id) => { setAutoUserId(id); setTab("users"); }} />}
       {tab === "roles" && <RolesPermissionsCard />}
       {tab === "logins" && <LoginsTab />}
       {tab === "audit" && <AuditTab />}
@@ -98,12 +117,23 @@ export default function AdminPage() {
 
 /* ---------------------------------- Users --------------------------------- */
 
-function UsersTab() {
+function UsersTab({ autoSelectId, onConsumed }: { autoSelectId?: number | null; onConsumed?: () => void }) {
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "users"],
     queryFn: () => api.get<{ users: AdminUser[] }>("/api/admin/users").then((r) => r.users),
   });
   const [selected, setSelected] = useState<AdminUser | null>(null);
+
+  // Deep link / "Open & reset" from the Requests tab auto-opens the manage dialog.
+  useEffect(() => {
+    if (autoSelectId && data) {
+      const match = data.find((u) => u.id === autoSelectId);
+      if (match) {
+        setSelected(match);
+        onConsumed?.();
+      }
+    }
+  }, [autoSelectId, data, onConsumed]);
 
   if (isLoading) return <LoadingBlock />;
 
@@ -135,7 +165,7 @@ function UsersTab() {
                     </div>
                   </TD>
                   <TD>
-                    <Badge variant="secondary" className="capitalize">{u.role}</Badge>
+                    <Badge variant="secondary" className="capitalize">{u.role.replace("_", " ")}</Badge>
                   </TD>
                   <TD>
                     <div className="flex flex-wrap gap-1">
@@ -148,7 +178,7 @@ function UsersTab() {
                   <TD className="whitespace-nowrap text-muted-foreground">{relativeTime(u.last_login_at)}</TD>
                   <TD className="font-mono text-xs text-muted-foreground">{u.current_ip ?? u.last_login_ip ?? "—"}</TD>
                   <TD>
-                    <Button variant="outline" size="sm" onClick={() => setSelected(u)}>Manage</Button>
+                    <Button variant="outline" size="sm" disabled={u.manageable === false} title={u.manageable === false ? "You can't manage an account at or above your role" : undefined} onClick={() => setSelected(u)}>Manage</Button>
                   </TD>
                 </TR>
               ))}
@@ -164,6 +194,7 @@ function UsersTab() {
 function ManageUserDialog({ user, onClose }: { user: AdminUser; onClose: () => void }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user: me } = useAuth();
   const [role, setRole] = useState<Role>(user.role);
   const [active, setActive] = useState(user.is_active);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
@@ -216,7 +247,7 @@ function ManageUserDialog({ user, onClose }: { user: AdminUser; onClose: () => v
           <div className="space-y-2">
             <Label>Role</Label>
             <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
-              <option value="admin">Admin</option>
+              {me?.is_super_admin && <option value="admin">Admin</option>}
               <option value="analyst">Analyst</option>
               <option value="viewer">Viewer</option>
             </Select>
@@ -495,6 +526,7 @@ function AssignedDashboardsSection({ user }: { user: AdminUser }) {
 function CreateUserDialog({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user: me } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("viewer");
@@ -539,7 +571,7 @@ function CreateUserDialog({ onClose }: { onClose: () => void }) {
           <div className="space-y-2">
             <Label>Role</Label>
             <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
-              <option value="admin">Admin</option>
+              {me?.is_super_admin && <option value="admin">Admin</option>}
               <option value="analyst">Analyst</option>
               <option value="viewer">Viewer</option>
             </Select>
@@ -550,6 +582,83 @@ function CreateUserDialog({ onClose }: { onClose: () => void }) {
         </div>
       )}
     </Dialog>
+  );
+}
+
+/* ------------------------------ Reset requests ---------------------------- */
+
+interface ResetRequest {
+  id: number;
+  type: "password" | "mfa";
+  created_at: string;
+  user: { id: number; name: string; email: string; role: Role };
+}
+
+function RequestsTab({ onManage }: { onManage: (userId: number) => void }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "reset-requests"],
+    queryFn: () => api.get<{ requests: ResetRequest[] }>("/api/admin/reset-requests").then((r) => r.requests),
+  });
+
+  async function dismiss(id: number) {
+    try {
+      await api.post(`/api/admin/reset-requests/${id}/dismiss`);
+      qc.invalidateQueries({ queryKey: ["admin", "reset-requests"] });
+      toast({ title: "Request dismissed", variant: "success" });
+    } catch (e) {
+      toast({ title: "Failed", description: e instanceof ApiError ? e.message : "Error", variant: "error" });
+    }
+  }
+
+  if (isLoading) return <LoadingBlock />;
+
+  return (
+    <Card>
+      <CardContent className="pt-5">
+        {!data || data.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">No pending password/MFA reset requests.</p>
+        ) : (
+          <Table>
+            <THead>
+              <TR>
+                <TH>User</TH>
+                <TH>Requested</TH>
+                <TH>When</TH>
+                <TH></TH>
+              </TR>
+            </THead>
+            <TBody>
+              {data.map((r) => (
+                <TR key={r.id}>
+                  <TD>
+                    <p className="font-medium">{r.user.name}</p>
+                    <p className="text-xs text-muted-foreground">{r.user.email}</p>
+                  </TD>
+                  <TD>
+                    <Badge variant={r.type === "mfa" ? "warning" : "secondary"}>
+                      {r.type === "mfa" ? "Reset MFA" : "Reset password"}
+                    </Badge>
+                  </TD>
+                  <TD className="whitespace-nowrap text-muted-foreground">{relativeTime(r.created_at)}</TD>
+                  <TD>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => onManage(r.user.id)}>
+                        Open &amp; reset
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => dismiss(r.id)}>
+                        Dismiss
+                      </Button>
+                    </div>
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

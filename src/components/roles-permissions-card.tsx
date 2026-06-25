@@ -19,108 +19,119 @@ const PERMISSIONS: Permission[] = [
   {
     category: "Dashboards & Data",
     label: "View dashboards assigned by an admin",
-    matrix: { admin: true, analyst: true, viewer: true },
+    matrix: { super_admin: true, admin:true, analyst: true, viewer: true },
   },
   {
     category: "Dashboards & Data",
     label: "Build / edit / save own dashboards",
-    matrix: { admin: true, analyst: true, viewer: false },
+    matrix: { super_admin: true, admin:true, analyst: true, viewer: false },
   },
   {
     category: "Dashboards & Data",
     label: "Assign a dashboard to other users",
-    matrix: { admin: true, analyst: false, viewer: false },
+    matrix: { super_admin: true, admin:true, analyst: false, viewer: false },
   },
   {
     category: "Dashboards & Data",
     label: "Browse endpoint data tables",
-    matrix: { admin: true, analyst: true, viewer: false },
+    matrix: { super_admin: true, admin:true, analyst: true, viewer: false },
   },
 
   // ----- sources -----
   {
     category: "API Sources",
     label: "Add / edit / delete connectors",
-    matrix: { admin: true, analyst: true, viewer: false },
+    matrix: { super_admin: true, admin:true, analyst: true, viewer: false },
   },
   {
     category: "API Sources",
     label: "Trigger an on-demand refresh",
-    matrix: { admin: true, analyst: true, viewer: false },
+    matrix: { super_admin: true, admin:true, analyst: true, viewer: false },
   },
   {
     category: "API Sources",
     label: "View source list and status",
-    matrix: { admin: true, analyst: true, viewer: false },
+    matrix: { super_admin: true, admin:true, analyst: true, viewer: false },
   },
 
   // ----- user / admin -----
   {
     category: "Users & Admin",
     label: "Create users, set roles, reset passwords",
-    matrix: { admin: true, analyst: false, viewer: false },
+    description: "Admins manage Analysts & Viewers only; Super Admins manage everyone.",
+    matrix: { super_admin: true, admin:true, analyst: false, viewer: false },
+  },
+  {
+    category: "Users & Admin",
+    label: "Manage Admin accounts (create / edit / reset / delete admins)",
+    matrix: { super_admin: true, admin: false, analyst: false, viewer: false },
   },
   {
     category: "Users & Admin",
     label: "Delete users",
-    matrix: { admin: true, analyst: false, viewer: false },
+    matrix: { super_admin: true, admin:true, analyst: false, viewer: false },
   },
   {
     category: "Users & Admin",
     label: "Require / reset another user's MFA",
-    matrix: { admin: true, analyst: false, viewer: false },
+    matrix: { super_admin: true, admin:true, analyst: false, viewer: false },
   },
   {
     category: "Users & Admin",
     label: "View login activity & audit log",
-    matrix: { admin: true, analyst: false, viewer: false },
+    matrix: { super_admin: true, admin:true, analyst: false, viewer: false },
   },
 
   // ----- account -----
   {
     category: "Account",
     label: "Change own password",
-    matrix: { admin: true, analyst: true, viewer: true },
+    matrix: { super_admin: true, admin:true, analyst: true, viewer: true },
   },
   {
     category: "Account",
     label: "Self-enroll an authenticator (MFA)",
     description: "Non-admins can only enroll when an admin has flagged them.",
-    matrix: { admin: true, analyst: false, viewer: false },
+    matrix: { super_admin: true, admin:true, analyst: false, viewer: false },
   },
   {
     category: "Account",
     label: "Disable own MFA",
-    matrix: { admin: true, analyst: false, viewer: false },
+    matrix: { super_admin: true, admin:true, analyst: false, viewer: false },
   },
   {
     category: "Account",
     label: "Receive email notifications (opt-in)",
-    matrix: { admin: true, analyst: true, viewer: true },
+    matrix: { super_admin: true, admin:true, analyst: true, viewer: true },
   },
 
   // ----- system -----
   {
     category: "System",
     label: "Configure SMTP / mail settings",
-    matrix: { admin: true, analyst: false, viewer: false },
+    matrix: { super_admin: true, admin:true, analyst: false, viewer: false },
   },
   {
     category: "System",
     label: "Edit notification templates",
-    matrix: { admin: true, analyst: false, viewer: false },
+    matrix: { super_admin: true, admin:true, analyst: false, viewer: false },
   },
   {
     category: "System",
     label: "View tech stack & CVE scan",
-    matrix: { admin: true, analyst: false, viewer: false },
+    matrix: { super_admin: true, admin:true, analyst: true, viewer: true },
   },
 ];
 
 const ROLE_META: Record<Role, { label: string; description: string; icon: typeof ShieldCheck }> = {
+  super_admin: {
+    label: "Super Admin",
+    description: "Everything an admin can do, plus full control over Admin accounts.",
+    icon: ShieldCheck,
+  },
   admin: {
     label: "Admin",
-    description: "Full control: users, sources, dashboards, mail, templates, audit.",
+    description: "Manage Analysts/Viewers, sources, dashboards, mail, templates, audit.",
     icon: ShieldCheck,
   },
   analyst: {
@@ -195,11 +206,11 @@ export function RolesPermissionsCard({ compact = false }: { compact?: boolean })
                           <th
                             key={r}
                             className={cn(
-                              "px-3 py-2 text-center font-medium capitalize",
+                              "px-3 py-2 text-center font-medium",
                               r === myRole && "text-primary"
                             )}
                           >
-                            {r}
+                            {ROLE_META[r].label}
                           </th>
                         ))}
                       </tr>

@@ -167,10 +167,6 @@ export default function LoginPage() {
             )}
           </CardContent>
         </Card>
-
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Demo: admin@compliance.local / Admin@12345!
-        </p>
       </div>
     </div>
   );

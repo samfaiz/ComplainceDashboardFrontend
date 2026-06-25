@@ -119,7 +119,7 @@ export default function HealthPage() {
         </Panel>
       </div>
 
-      {user?.is_admin && <TechStackPanel />}
+      <TechStackPanel />
     </div>
   );
 }

@@ -56,7 +56,7 @@ export default function SettingsPage() {
 
 function PasswordCard() {
   const { toast } = useToast();
-  const { refresh } = useAuth();
+  const { user, refresh } = useAuth();
   const [current, setCurrent] = useState("");
   const [pw, setPw] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -81,6 +81,21 @@ function PasswordCard() {
     } finally {
       setBusy(false);
     }
+  }
+
+  // Analysts/Viewers don't self-change their password — they request an admin reset.
+  if (!user?.is_admin && !user?.must_change_password) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Password</CardTitle>
+          <CardDescription>Password changes are handled by an administrator for your role.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RequestResetButton type="password" label="Request password reset" />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -177,7 +192,6 @@ function MfaCard() {
 
   // Only admins can self-enroll; other users must be flagged by an admin.
   const canSelfEnroll = !!user?.is_admin || !!user?.mfa_required;
-  const canSelfDisable = !!user?.is_admin;
 
   return (
     <Card>
@@ -247,7 +261,7 @@ function MfaCard() {
           </div>
         )}
 
-        {user?.mfa_enabled && canSelfEnroll && (
+        {user?.mfa_enabled && user?.is_admin && (
           <div className="space-y-3 border-t pt-4">
             <Label>Confirm your password for the actions below</Label>
             <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Current password" className="max-w-sm" />
@@ -255,26 +269,47 @@ function MfaCard() {
               <Button variant="outline" loading={busy} disabled={!password} onClick={regenerate}>
                 <KeyRound className="h-4 w-4" /> Regenerate recovery codes
               </Button>
-              {canSelfDisable && (
-                <Button variant="destructive" loading={busy} disabled={!password} onClick={disable}>
-                  <ShieldOff className="h-4 w-4" /> Disable 2FA
-                </Button>
-              )}
+              <Button variant="destructive" loading={busy} disabled={!password} onClick={disable}>
+                <ShieldOff className="h-4 w-4" /> Disable 2FA
+              </Button>
             </div>
-            {!canSelfDisable && (
-              <p className="text-xs text-muted-foreground">
-                Only an administrator can disable MFA for your account.
-              </p>
-            )}
           </div>
         )}
 
-        {user?.mfa_enabled && !canSelfEnroll && (
-          <p className="text-xs text-muted-foreground">
-            MFA is active. Contact an administrator to reset or disable it.
-          </p>
+        {user?.mfa_enabled && !user?.is_admin && (
+          <div className="space-y-2 border-t pt-4">
+            <p className="text-xs text-muted-foreground">
+              MFA is active on your account. Lost your authenticator? Ask an administrator to reset it.
+            </p>
+            <RequestResetButton type="mfa" label="Request administrator to reset my MFA" />
+          </div>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function RequestResetButton({ type, label }: { type: "password" | "mfa"; label: string }) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  async function send() {
+    setBusy(true);
+    try {
+      await api.post("/api/account/reset-request", { type });
+      setSent(true);
+      toast({ title: "Request sent", description: "An administrator has been notified.", variant: "success" });
+    } catch (e) {
+      toast({ title: "Could not send request", description: e instanceof ApiError ? e.message : "Error", variant: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Button variant="outline" onClick={send} loading={busy} disabled={sent}>
+      {sent ? "Request sent ✓" : label}
+    </Button>
   );
 }

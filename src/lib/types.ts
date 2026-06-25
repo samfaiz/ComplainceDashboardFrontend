@@ -1,4 +1,4 @@
-export type Role = "admin" | "analyst" | "viewer";
+export type Role = "super_admin" | "admin" | "analyst" | "viewer";
 
 export interface User {
   id: number;
@@ -7,6 +7,7 @@ export interface User {
   role: Role;
   is_active: boolean;
   is_admin: boolean;
+  is_super_admin: boolean;
   can_manage: boolean;
   mfa_enabled: boolean;
   /** True when admin has flagged this account to enroll MFA. */
