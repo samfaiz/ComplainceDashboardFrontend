@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
  * but they haven't enrolled yet. They cannot reach the app until they finish.
  */
 export function MfaEnrollmentGate() {
-  const { refresh } = useAuth();
+  const { refresh, logout } = useAuth();
   const [setup, setSetup] = useState<{ secret: string; otpauth_url: string } | null>(null);
   const [code, setCode] = useState("");
   const [codes, setCodes] = useState<string[] | null>(null);
@@ -51,8 +51,7 @@ export function MfaEnrollmentGate() {
   }
 
   async function signOut() {
-    await api.post("/api/logout").catch(() => {});
-    await refresh();
+    await logout();
   }
 
   return (

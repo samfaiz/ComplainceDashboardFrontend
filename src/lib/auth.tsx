@@ -10,6 +10,7 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   refresh: () => Promise<unknown>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -17,6 +18,7 @@ const AuthContext = createContext<AuthContextValue>({
   isLoading: true,
   isAuthenticated: false,
   refresh: async () => {},
+  logout: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -29,7 +31,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const res = await api.get<{ user: User }>("/api/me");
         return res.user;
       } catch (e) {
-        if (e instanceof ApiError && (e.status === 401 || e.status === 419)) return null;
+        // 401/419 = no session; 403 = account disabled mid-session → treat as logged out.
+        if (e instanceof ApiError && [401, 419, 403].includes(e.status)) return null;
         throw e;
       }
     },
@@ -46,6 +49,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         refresh: () => qc.invalidateQueries({ queryKey: ["me"] }),
+        logout: async () => {
+          try {
+            await api.post("/api/logout");
+          } catch {
+            /* ignore — clear locally regardless */
+          }
+          // Wipe ALL cached data so nothing leaks to the next user on this browser.
+          qc.clear();
+        },
       }}
     >
       {children}

@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
  * the app until they set a new password.
  */
 export function ForcePasswordChangeGate() {
-  const { refresh } = useAuth();
+  const { refresh, logout } = useAuth();
   const [current, setCurrent] = useState("");
   const [pw, setPw] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -41,8 +41,7 @@ export function ForcePasswordChangeGate() {
   }
 
   async function signOut() {
-    await api.post("/api/logout").catch(() => {});
-    await refresh();
+    await logout();
   }
 
   return (

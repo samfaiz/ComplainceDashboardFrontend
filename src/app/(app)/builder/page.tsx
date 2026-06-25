@@ -165,7 +165,13 @@ interface RuleCondition {
   value: string;
 }
 
-const RULE_FIELDS: { value: string; label: string; type: "duration" | "enum" | "bool" | "text"; options?: string[] }[] = [
+const STANDARD_FIELD_KEYS = new Set([
+  "external_id", "hostname", "os_platform", "os_version", "agent_version",
+  "health_status", "last_seen_at", "ip_address", "mac_address", "is_isolated", "compliance_status",
+]);
+const humanizeField = (k: string) => k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+const RULE_FIELDS: { value: string; label: string; type: "duration" | "enum" | "bool" | "text" | "custom"; options?: string[] }[] = [
   { value: "last_seen_days", label: "Last seen (days ago)", type: "duration" },
   { value: "health_status", label: "Health status", type: "enum", options: ["online", "stale", "offline", "error", "unknown"] },
   { value: "compliance_status", label: "Compliance", type: "enum", options: ["compliant", "non_compliant", "unknown"] },
@@ -177,12 +183,22 @@ const RULE_FIELDS: { value: string; label: string; type: "duration" | "enum" | "
   { value: "ip_address", label: "IP address", type: "text" },
 ];
 
-const ruleFieldMeta = (f: string) => RULE_FIELDS.find((x) => x.value === f) ?? RULE_FIELDS[0];
-
 function opsFor(t: string) {
   if (t === "duration") return [{ value: "gt", label: "more than" }, { value: "lt", label: "within" }];
   if (t === "enum") return [{ value: "eq", label: "is" }, { value: "neq", label: "is not" }, { value: "in", label: "is any of" }];
   if (t === "bool") return [{ value: "eq", label: "is" }];
+  if (t === "custom")
+    return [
+      { value: "eq", label: "equals" },
+      { value: "neq", label: "not equals" },
+      { value: "contains", label: "contains" },
+      { value: "not_contains", label: "does not contain" },
+      { value: "gt", label: "greater than" },
+      { value: "lt", label: "less than" },
+      { value: "in", label: "is any of" },
+      { value: "is_empty", label: "is empty" },
+      { value: "not_empty", label: "is not empty" },
+    ];
   return [
     { value: "eq", label: "equals" },
     { value: "neq", label: "not equals" },
@@ -205,6 +221,17 @@ function BuilderPageInner() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { scope, setScope, sources, sites, sourcesInScope, hasAny } = useScope();
+
+  // Custom (extra) fields the user mapped on their sources — usable in widget rules.
+  const customFields = (() => {
+    const keys = new Set<string>();
+    (sources ?? []).forEach((s) =>
+      Object.keys(s.field_mappings ?? {}).forEach((k) => {
+        if (!STANDARD_FIELD_KEYS.has(k)) keys.add(k);
+      })
+    );
+    return [...keys].sort();
+  })();
   const { data: dashboard } = useDefaultDashboard();
   const { data: summaryRes } = useScopeSummary(scope);
   const { data: trends } = useScopeTrends(scope);
@@ -353,6 +380,7 @@ function BuilderPageInner() {
       {(adding || editing) && (
         <WidgetConfigDialog
           widget={editing}
+          customFields={customFields}
           onClose={() => {
             setAdding(false);
             setEditing(null);
@@ -371,10 +399,12 @@ function BuilderPageInner() {
 
 function WidgetConfigDialog({
   widget,
+  customFields,
   onClose,
   onSubmit,
 }: {
   widget: Widget | null;
+  customFields: string[];
   onClose: () => void;
   onSubmit: (type: string, title: string, config: Record<string, unknown>) => void;
 }) {
@@ -564,6 +594,7 @@ function WidgetConfigDialog({
                 type={type}
                 display={display}
                 setDisplay={setDisplay}
+                customFields={customFields}
               />
             )}
 
@@ -818,6 +849,7 @@ function RuleBuilder({
   type,
   display,
   setDisplay,
+  customFields,
 }: {
   match: string;
   setMatch: (s: string) => void;
@@ -826,7 +858,14 @@ function RuleBuilder({
   type: WidgetType;
   display: string;
   setDisplay: (s: string) => void;
+  customFields: string[];
 }) {
+  const allFields = [
+    ...RULE_FIELDS,
+    ...customFields.map((k) => ({ value: `extra.${k}`, label: humanizeField(k), type: "custom" as const })),
+  ];
+  const metaFor = (f: string) => allFields.find((x) => x.value === f) ?? allFields[0];
+
   return (
     <div className="space-y-3 rounded-lg border p-3">
       <div className="flex items-center gap-2 text-sm">
@@ -839,7 +878,7 @@ function RuleBuilder({
       </div>
 
       {conditions.map((c, i) => {
-        const meta = ruleFieldMeta(c.field);
+        const meta = metaFor(c.field);
         const ops = opsFor(meta.type);
         const setC = (patch: Partial<RuleCondition>) =>
           setConditions((prev) => prev.map((x, j) => (j === i ? { ...x, ...patch } : x)));
@@ -848,12 +887,12 @@ function RuleBuilder({
             <Select
               value={c.field}
               onChange={(e) => {
-                const nm = ruleFieldMeta(e.target.value);
+                const nm = metaFor(e.target.value);
                 setC({ field: e.target.value, op: opsFor(nm.type)[0].value, value: nm.type === "duration" ? "2" : "" });
               }}
               className="h-8 w-auto min-w-[150px]"
             >
-              {RULE_FIELDS.map((f) => (
+              {allFields.map((f) => (
                 <option key={f.value} value={f.value}>
                   {f.label}
                 </option>
@@ -892,7 +931,7 @@ function RuleBuilder({
             {meta.type === "enum" && c.op === "in" && (
               <Input value={c.value} onChange={(e) => setC({ value: e.target.value })} placeholder="online, stale" className="h-8 w-40" />
             )}
-            {meta.type === "text" && !["is_empty", "not_empty"].includes(c.op) && (
+            {(meta.type === "text" || meta.type === "custom") && !["is_empty", "not_empty"].includes(c.op) && (
               <Input value={c.value} onChange={(e) => setC({ value: e.target.value })} placeholder="value" className="h-8 w-40" />
             )}
 

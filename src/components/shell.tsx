@@ -15,14 +15,13 @@ import {
   ShieldAlert,
   AlertTriangle,
 } from "lucide-react";
-import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/data", label: "Endpoint Data", icon: Table2, manage: true },
+  { href: "/data", label: "Endpoint Data", icon: Table2 },
   { href: "/sources", label: "API Sources", icon: Plug, manage: true },
   { href: "/builder", label: "Customize", icon: SlidersHorizontal, manage: true },
   { href: "/admin", label: "Admin", icon: Users, admin: true },
@@ -33,15 +32,10 @@ const nav = [
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, refresh } = useAuth();
+  const { user, logout: signOut } = useAuth();
 
   async function logout() {
-    try {
-      await api.post("/api/logout");
-    } catch {
-      /* ignore */
-    }
-    await refresh();
+    await signOut();
     router.replace("/login");
   }
 

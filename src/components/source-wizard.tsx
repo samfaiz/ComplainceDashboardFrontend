@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -40,6 +40,18 @@ const NORMALIZED_FIELDS = [
   { key: "mac_address", label: "MAC Address" },
 ];
 
+const STANDARD_KEYS = new Set(NORMALIZED_FIELDS.map((f) => f.key));
+
+/** Turn a custom field name into a safe key used as the `extra` slug + default column. */
+function slugifyField(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40);
+}
+
 const STEPS = ["Source", "Connect", "Map fields", "Schedule & key"];
 
 interface TestResult {
@@ -48,6 +60,76 @@ interface TestResult {
   available_fields?: string[];
   preview?: Record<string, unknown>[];
   message?: string;
+}
+
+/** Searchable dropdown of the API's available fields; also accepts a typed path (nested/dot). */
+function FieldCombobox({
+  value,
+  onChange,
+  options,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder?: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  const q = value.trim().toLowerCase();
+  const filtered = options.filter((o) => o.toLowerCase().includes(q)).slice(0, 60);
+
+  return (
+    <div ref={ref} className={cn("relative", className)}>
+      <Input
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder={placeholder}
+        className="font-mono text-xs"
+      />
+      {open && (
+        <div className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-md border bg-card p-1 shadow-lg">
+          {options.length === 0 ? (
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">
+              Run “Test connection” first to load fields — or type a path manually.
+            </p>
+          ) : filtered.length > 0 ? (
+            filtered.map((o) => (
+              <button
+                key={o}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onChange(o);
+                  setOpen(false);
+                }}
+                className="block w-full truncate rounded px-2 py-1 text-left font-mono text-xs hover:bg-muted"
+              >
+                {o}
+              </button>
+            ))
+          ) : (
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">No match — “{value}” will be used as-is.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function SourceWizard({ existing }: { existing?: ApiSource }) {
@@ -79,6 +161,25 @@ export function SourceWizard({ existing }: { existing?: ApiSource }) {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [saving, setSaving] = useState(false);
+  const [newFieldName, setNewFieldName] = useState("");
+  const [newFieldPath, setNewFieldPath] = useState("");
+
+  const customEntries = Object.entries(mappings).filter(([k]) => !STANDARD_KEYS.has(k));
+
+  function addCustomField() {
+    const key = slugifyField(newFieldName);
+    if (!key || !newFieldPath.trim()) return;
+    setMappings((m) => ({ ...m, [key]: newFieldPath.trim() }));
+    setNewFieldName("");
+    setNewFieldPath("");
+  }
+  function removeCustomField(key: string) {
+    setMappings((m) => {
+      const next = { ...m };
+      delete next[key];
+      return next;
+    });
+  }
 
   const preset = useMemo<Preset | undefined>(() => presets.find((p) => p.vendor === vendor), [presets, vendor]);
 
@@ -174,8 +275,18 @@ export function SourceWizard({ existing }: { existing?: ApiSource }) {
         await api.put(`/api/sources/${existing!.id}`, buildPayload(true));
         toast({ title: "Source updated", variant: "success" });
       } else {
-        await api.post("/api/sources", buildPayload(true));
-        toast({ title: "Source connected", variant: "success" });
+        const res = await api.post<{ initial_run?: { status: string; records_ingested?: number; error?: string | null } }>(
+          "/api/sources",
+          buildPayload(true)
+        );
+        const run = res.initial_run;
+        if (run?.status === "success") {
+          toast({ title: "Source connected", description: `Imported ${run.records_ingested ?? 0} endpoints.`, variant: "success" });
+        } else if (run?.status === "failed") {
+          toast({ title: "Connected, but first sync failed", description: run.error || "Check the API key, then Refresh.", variant: "warning" });
+        } else {
+          toast({ title: "Source connected", variant: "success" });
+        }
       }
       qc.invalidateQueries({ queryKey: ["sources"] });
       router.push("/sources");
@@ -404,6 +515,54 @@ export function SourceWizard({ existing }: { existing?: ApiSource }) {
                     />
                   </div>
                 ))}
+              </div>
+
+              {/* Custom fields — captured into `extra`, queryable in widgets/rules, shown in Endpoints. */}
+              <div className="space-y-2 rounded-lg border p-3">
+                <Label className="text-xs">Custom fields</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Map any other value the API returns. These are saved per endpoint and can be used in custom widgets,
+                  filters, and rules — and shown/renamed in the Endpoints table.
+                </p>
+                {customEntries.map(([key, path]) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <Badge variant="secondary" className="font-mono shrink-0">{key}</Badge>
+                    <FieldCombobox
+                      className="flex-1"
+                      value={path}
+                      onChange={(v) => setMappings((m) => ({ ...m, [key]: v }))}
+                      options={testResult?.available_fields ?? []}
+                      placeholder="json.path"
+                    />
+                    <Button type="button" variant="ghost" size="sm" onClick={() => removeCustomField(key)}>
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+                <div className="flex items-center gap-2 pt-1">
+                  <Input
+                    value={newFieldName}
+                    onChange={(e) => setNewFieldName(e.target.value)}
+                    placeholder="Field name (e.g. Risk score)"
+                    className="flex-1 text-xs"
+                  />
+                  <FieldCombobox
+                    className="flex-1"
+                    value={newFieldPath}
+                    onChange={setNewFieldPath}
+                    options={testResult?.available_fields ?? []}
+                    placeholder="json.path (e.g. riskScore)"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addCustomField}
+                    disabled={!newFieldName.trim() || !newFieldPath.trim()}
+                  >
+                    Add
+                  </Button>
+                </div>
               </div>
               {testResult?.preview && testResult.preview.length > 0 && (
                 <div className="rounded-lg border p-3">

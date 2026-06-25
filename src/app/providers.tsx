@@ -10,7 +10,14 @@ export function Providers({ children }: { children: ReactNode }) {
     () =>
       new QueryClient({
         defaultOptions: {
-          queries: { retry: false, refetchOnWindowFocus: false },
+          queries: {
+            retry: false,
+            refetchOnWindowFocus: false,
+            // Reuse cached data across navigations instead of refetching on every
+            // mount; mutations still invalidate explicitly where needed.
+            staleTime: 60_000, // 1 min
+            gcTime: 5 * 60_000, // keep cached 5 min
+          },
         },
       })
   );

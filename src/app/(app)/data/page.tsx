@@ -3,20 +3,13 @@
 import { useScope } from "@/lib/use-scope";
 import { PageHeader } from "@/components/page-header";
 import { NoSources } from "@/components/source-bar";
-import { RoleGuard } from "@/components/role-guard";
 import { ScopeBar } from "@/components/scope-bar";
 import { EndpointTable } from "@/components/endpoint-table";
 import { Card, CardContent } from "@/components/ui/card";
 
+// Visible to all roles — Viewers can browse endpoint data (column layout is
+// admin-defaulted with a personal override; see EndpointTable).
 export default function DataPage() {
-  return (
-    <RoleGuard require="manage">
-      <DataPageInner />
-    </RoleGuard>
-  );
-}
-
-function DataPageInner() {
   const { scope, setScope, sources, sites, sourcesInScope, isLoading, hasAny, label } = useScope();
 
   if (isLoading) {
