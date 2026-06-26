@@ -5,9 +5,16 @@ export interface User {
   name: string;
   email: string;
   role: Role;
+  /** The org this user belongs to (null for the platform owner). */
+  organization_id: number | null;
+  organization_name: string | null;
   is_active: boolean;
   is_admin: boolean;
   is_super_admin: boolean;
+  /** Platform owner (super_admin) — can manage all organizations. */
+  is_platform_owner: boolean;
+  /** Set when a platform owner has "entered" an org to view it scoped. */
+  viewing_organization?: { id: number; name: string } | null;
   can_manage: boolean;
   mfa_enabled: boolean;
   /** True when admin has flagged this account to enroll MFA. */
@@ -36,6 +43,16 @@ export type AuthType = "bearer" | "api_key_header" | "basic" | "oauth2_client_cr
 export interface Site {
   id: number;
   name: string;
+  sources_count: number;
+}
+
+export interface Organization {
+  id: number;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  created_at: string | null;
+  users_count: number;
   sources_count: number;
 }
 

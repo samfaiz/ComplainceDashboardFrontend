@@ -37,6 +37,12 @@ export default function SettingsPage() {
               <span className="text-muted-foreground">Email</span>
               <span className="font-medium">{user?.email}</span>
             </div>
+            {user?.organization_name && (
+              <div className="flex justify-between border-b py-2">
+                <span className="text-muted-foreground">Organization</span>
+                <span className="font-medium">{user.organization_name}</span>
+              </div>
+            )}
             <div className="flex justify-between py-2">
               <span className="text-muted-foreground">Role</span>
               <Badge variant="secondary" className="capitalize">{user?.role}</Badge>

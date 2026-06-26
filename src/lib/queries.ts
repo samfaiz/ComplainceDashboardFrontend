@@ -11,11 +11,23 @@ import type {
   NotificationLogEntry,
   NotificationSubscription,
   NotificationTemplate,
+  Organization,
   Preset,
   Site,
   Summary,
   TechStackSnapshot,
 } from "./types";
+
+/* ---- Platform (super_admin): cross-organization management ---- */
+
+export function usePlatformOrgs(enabled = true) {
+  return useQuery({
+    queryKey: ["platform", "organizations"],
+    enabled,
+    queryFn: () =>
+      api.get<{ organizations: Organization[] }>("/api/platform/organizations").then((r) => r.organizations),
+  });
+}
 
 export function useSources() {
   return useQuery({

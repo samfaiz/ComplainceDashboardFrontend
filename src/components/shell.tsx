@@ -14,7 +14,11 @@ import {
   ShieldCheck,
   ShieldAlert,
   AlertTriangle,
+  Building2,
+  DoorOpen,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +29,7 @@ const nav = [
   { href: "/sources", label: "API Sources", icon: Plug, manage: true },
   { href: "/builder", label: "Customize", icon: SlidersHorizontal, manage: true },
   { href: "/admin", label: "Admin", icon: Users, admin: true },
+  { href: "/platform", label: "Platform", icon: Building2, platform: true },
   { href: "/health", label: "System Health", icon: Activity },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -32,11 +37,22 @@ const nav = [
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const qc = useQueryClient();
   const { user, logout: signOut } = useAuth();
 
   async function logout() {
     await signOut();
     router.replace("/login");
+  }
+
+  async function exitOrg() {
+    try {
+      await api.post("/api/platform/exit");
+    } catch {
+      /* ignore — refresh regardless */
+    }
+    await qc.invalidateQueries();
+    router.replace("/platform");
   }
 
   return (
@@ -48,7 +64,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="flex-1 space-y-1 p-3">
           {nav
-            .filter((i) => (!i.admin || user?.is_admin) && (!i.manage || user?.can_manage))
+            .filter(
+              (i) =>
+                (!i.admin || user?.is_admin) &&
+                (!i.manage || user?.can_manage) &&
+                (!i.platform || user?.is_platform_owner)
+            )
             .map((item) => {
               const active = pathname === item.href || pathname.startsWith(item.href + "/");
               const Icon = item.icon;
@@ -73,6 +94,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="mb-2 px-2">
             <p className="truncate text-sm font-medium">{user?.name}</p>
             <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
+            {(user?.organization_name || user?.is_platform_owner) && (
+              <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
+                <Building2 className="h-3 w-3 shrink-0" />
+                {user?.organization_name ?? "Platform operator"}
+              </p>
+            )}
             <Badge variant="secondary" className="mt-1 capitalize">
               {user?.role}
             </Badge>
@@ -108,6 +135,20 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
+        {user?.viewing_organization && (
+          <div className="flex items-center justify-between gap-2 border-b border-primary/40 bg-primary/10 px-5 py-2 text-sm">
+            <span className="flex items-center gap-2 text-primary">
+              <Building2 className="h-4 w-4" />
+              Viewing organization: <strong className="font-semibold">{user.viewing_organization.name}</strong>
+            </span>
+            <button
+              onClick={exitOrg}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              <DoorOpen className="h-3.5 w-3.5" /> Exit to platform
+            </button>
+          </div>
+        )}
         {user?.ip_flagged && (
           <div className="flex items-center gap-2 border-b border-destructive/40 bg-destructive/10 px-5 py-2 text-sm text-destructive">
             <AlertTriangle className="h-4 w-4" />
