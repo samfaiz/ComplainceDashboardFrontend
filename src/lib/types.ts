@@ -8,6 +8,10 @@ export interface User {
   /** The org this user belongs to (null for the platform owner). */
   organization_id: number | null;
   organization_name: string | null;
+  /** True for throwaway "try it" demo accounts. */
+  is_demo: boolean;
+  /** When the demo account expires (ISO string); null for normal accounts. */
+  demo_expires_at: string | null;
   is_active: boolean;
   is_admin: boolean;
   is_super_admin: boolean;

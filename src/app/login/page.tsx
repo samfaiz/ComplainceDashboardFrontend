@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ShieldCheck, KeyRound } from "lucide-react";
+import { ShieldCheck, KeyRound, Sparkles } from "lucide-react";
 import { api, ApiError, ensureCsrf } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -21,11 +21,37 @@ export default function LoginPage() {
   const [code, setCode] = useState("");
   const [useRecovery, setUseRecovery] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [demoBusy, setDemoBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(() =>
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("expired") === "demo"
+      ? "Your demo session has expired. Generate a new one to keep exploring."
+      : null
+  );
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) router.replace("/dashboard");
   }, [isLoading, isAuthenticated, router]);
+
+  async function startDemo() {
+    setError(null);
+    setNotice(null);
+    setDemoBusy(true);
+    try {
+      await ensureCsrf();
+      await api.post("/api/demo"); // creates a throwaway workspace and signs in
+      await refresh();
+      router.replace("/dashboard");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        setError("Too many demo accounts from your network. Please try again later.");
+      } else {
+        setError(err instanceof ApiError ? err.message : "Could not start the demo");
+      }
+      setDemoBusy(false);
+    }
+  }
 
   async function submitCredentials(e: React.FormEvent) {
     e.preventDefault();
@@ -78,6 +104,11 @@ export default function LoginPage() {
 
         <Card>
           <CardContent className="pt-6">
+            {notice && (
+              <div className="mb-4 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">
+                {notice}
+              </div>
+            )}
             {error && (
               <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {error}
@@ -164,6 +195,26 @@ export default function LoginPage() {
                   </button>
                 </div>
               </form>
+            )}
+
+            {step === "credentials" && (
+              <>
+                <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  loading={demoBusy}
+                  onClick={startDemo}
+                >
+                  <Sparkles className="h-4 w-4" /> Generate demo account
+                </Button>
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  Instantly explore a sample workspace — expires in 1 hour.
+                </p>
+              </>
             )}
           </CardContent>
         </Card>

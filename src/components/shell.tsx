@@ -22,6 +22,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { DemoSession } from "@/components/demo-session";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -134,6 +135,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
             )}
           </div>
         </header>
+
+        <DemoSession />
 
         {user?.viewing_organization && (
           <div className="flex items-center justify-between gap-2 border-b border-primary/40 bg-primary/10 px-5 py-2 text-sm">
