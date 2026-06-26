@@ -13,6 +13,7 @@ import {
 } from "@/lib/queries";
 import { useAuth } from "@/lib/auth";
 import { PageHeader } from "@/components/page-header";
+import { LastRefreshed } from "@/components/last-refreshed";
 import { NoSources } from "@/components/source-bar";
 import { ScopeBar } from "@/components/scope-bar";
 import { DashboardView } from "@/components/dashboard-view";
@@ -83,6 +84,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-5">
       <PageHeader title="Compliance Dashboard" description={`Endpoint posture · ${isReadOnly ? "assigned dashboard" : label}`}>
+        <LastRefreshed at={summaryRes?.captured_at} />
         {showSwitcher && (
           <Select
             value={String(activeId ?? "")}

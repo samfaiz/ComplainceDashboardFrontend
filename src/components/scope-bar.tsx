@@ -7,7 +7,6 @@ import { Plus, RefreshCw, Building2, Lock, Globe } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { relativeTime } from "@/lib/format";
 import type { ApiSource, Site } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -32,12 +31,6 @@ export function ScopeBar({
   const { toast } = useToast();
   const [refreshing, setRefreshing] = useState(false);
   const [sitesOpen, setSitesOpen] = useState(false);
-
-  const lastRun = sourcesInScope
-    .map((s) => s.last_run_at)
-    .filter(Boolean)
-    .sort()
-    .at(-1);
 
   async function refresh() {
     setRefreshing(true);
@@ -109,7 +102,7 @@ export function ScopeBar({
       )}
 
       <span className="text-xs text-muted-foreground">
-        {sourcesInScope.length} source(s) · {relativeTime(lastRun)}
+        {sourcesInScope.length} source(s)
         {sourcesInScope.some((s) => s.requires_unlock) && (
           <span className="ml-2 inline-flex items-center gap-1 text-warning">
             <Lock className="h-3 w-3" /> need unlock

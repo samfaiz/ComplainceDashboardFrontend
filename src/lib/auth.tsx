@@ -2,7 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError } from "./api";
+import { api, ApiError, resetCsrf } from "./api";
 import type { User } from "./types";
 
 interface AuthContextValue {
@@ -55,8 +55,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } catch {
             /* ignore — clear locally regardless */
           }
-          // Wipe ALL cached data so nothing leaks to the next user on this browser.
-          qc.clear();
+          // Seed a logged-out state directly. Clearing instead would refetch
+          // /api/me and, if the session somehow survived, restore the user and
+          // bounce us straight back to the dashboard. Then wipe every other
+          // cached query so nothing leaks to the next user on this browser.
+          qc.setQueryData(["me"], null);
+          qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "me" });
+          resetCsrf();
         },
       }}
     >

@@ -36,6 +36,15 @@ export async function ensureCsrf(force = false): Promise<void> {
   csrfReady = true;
 }
 
+/**
+ * Forget the cached CSRF state so the next mutating request re-primes the
+ * cookie. Call this after logout, since the session (and its CSRF token)
+ * rotates server-side.
+ */
+export function resetCsrf(): void {
+  csrfReady = false;
+}
+
 type Options = {
   method?: string;
   body?: unknown;
@@ -45,11 +54,10 @@ type Options = {
 
 export async function apiFetch<T = unknown>(path: string, opts: Options = {}): Promise<T> {
   const method = (opts.method || "GET").toUpperCase();
+  const mutating = method !== "GET" && method !== "HEAD";
 
   // Mutating requests need a CSRF token.
-  if (method !== "GET" && method !== "HEAD") {
-    if (!readCookie("XSRF-TOKEN")) await ensureCsrf();
-  }
+  if (mutating && !readCookie("XSRF-TOKEN")) await ensureCsrf();
 
   let url = `${API_BASE}${path}`;
   if (opts.params) {
@@ -61,18 +69,31 @@ export async function apiFetch<T = unknown>(path: string, opts: Options = {}): P
     if (s) url += `?${s}`;
   }
 
-  const headers: Record<string, string> = { Accept: "application/json" };
-  const token = readCookie("XSRF-TOKEN");
-  if (token) headers["X-XSRF-TOKEN"] = token;
-  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+  // Re-reads the (possibly refreshed) XSRF-TOKEN cookie on each attempt.
+  const send = () => {
+    const headers: Record<string, string> = { Accept: "application/json" };
+    const token = readCookie("XSRF-TOKEN");
+    if (token) headers["X-XSRF-TOKEN"] = token;
+    if (opts.body !== undefined) headers["Content-Type"] = "application/json";
 
-  const res = await fetch(url, {
-    method,
-    headers,
-    credentials: "include",
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-    signal: opts.signal,
-  });
+    return fetch(url, {
+      method,
+      headers,
+      credentials: "include",
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      signal: opts.signal,
+    });
+  };
+
+  let res = await send();
+
+  // 419 = CSRF token expired/rotated (e.g. the session regenerated at login).
+  // Re-prime the cookie and replay once so mutations like logout don't fail
+  // silently and leave the user half-signed-out.
+  if (res.status === 419 && mutating) {
+    await ensureCsrf(true);
+    res = await send();
+  }
 
   if (res.status === 204) return undefined as T;
 
