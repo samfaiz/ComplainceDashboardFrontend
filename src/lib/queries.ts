@@ -12,8 +12,10 @@ import type {
   NotificationSubscription,
   NotificationTemplate,
   Organization,
+  PlatformMailSettings,
   Preset,
   Site,
+  SignupRequest,
   Summary,
   TechStackSnapshot,
 } from "./types";
@@ -26,6 +28,24 @@ export function usePlatformOrgs(enabled = true) {
     enabled,
     queryFn: () =>
       api.get<{ organizations: Organization[] }>("/api/platform/organizations").then((r) => r.organizations),
+  });
+}
+
+export function useSignupRequests(enabled = true) {
+  return useQuery({
+    queryKey: ["platform", "signup-requests"],
+    enabled,
+    queryFn: () =>
+      api.get<{ requests: SignupRequest[] }>("/api/platform/signup-requests").then((r) => r.requests),
+  });
+}
+
+export function usePlatformMailSettings(enabled = true) {
+  return useQuery({
+    queryKey: ["platform", "mail-settings"],
+    enabled,
+    queryFn: () =>
+      api.get<{ settings: PlatformMailSettings }>("/api/platform/mail-settings").then((r) => r.settings),
   });
 }
 

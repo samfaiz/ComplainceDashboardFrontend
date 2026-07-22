@@ -60,6 +60,34 @@ export interface Organization {
   sources_count: number;
 }
 
+export interface SignupRequest {
+  id: number;
+  name: string;
+  email: string;
+  account_type: "organization" | "mssp" | "individual" | "other";
+  organization: string | null;
+  message: string | null;
+  status: string;
+  ip_address: string | null;
+  created_at: string | null;
+}
+
+export interface PlatformMailSettings {
+  transport: "smtp" | "log";
+  host: string | null;
+  port: number | null;
+  encryption: "tls" | "ssl" | null;
+  username: string | null;
+  has_password: boolean;
+  from_address: string | null;
+  from_name: string | null;
+  notify_email: string | null;
+  enabled: boolean;
+  last_test_at: string | null;
+  last_test_status: string | null;
+  last_test_error: string | null;
+}
+
 export interface ApiSource {
   id: number;
   name: string;

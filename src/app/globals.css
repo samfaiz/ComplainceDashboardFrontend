@@ -62,6 +62,34 @@
   --chart-5: oklch(0.68 0.2 310);
 }
 
+/* Light theme scope — the app is dark by default, but the login page renders
+   light (see EDR Compliance Login design). Re-declares the :root light tokens
+   so shadcn components inside .login-light render light. */
+.login-light {
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.18 0.01 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.01 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.01 260);
+  --primary: oklch(0.51 0.23 277);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.01 260);
+  --secondary-foreground: oklch(0.2 0.02 260);
+  --muted: oklch(0.96 0.01 260);
+  --muted-foreground: oklch(0.5 0.02 260);
+  --accent: oklch(0.96 0.01 260);
+  --accent-foreground: oklch(0.2 0.02 260);
+  --destructive: oklch(0.58 0.22 27);
+  --destructive-foreground: oklch(0.98 0 0);
+  --success: oklch(0.6 0.17 150);
+  --warning: oklch(0.75 0.16 75);
+  --border: oklch(0.92 0.008 260);
+  --input: oklch(0.92 0.008 260);
+  --ring: oklch(0.51 0.23 277);
+  color-scheme: light;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -133,3 +161,15 @@ body {
 
 @keyframes in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .animate-in { animation: in 150ms ease; }
+
+/* --- login split-screen showcase animations --- */
+@keyframes ls-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes ls-grow { 0%, 100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
+@keyframes ls-sweep { from { stroke-dashoffset: 214; } to { stroke-dashoffset: 18; } }
+@keyframes ls-dash { to { stroke-dashoffset: -18; } }
+@keyframes ls-pulse { 0%, 100% { opacity: 0.35; transform: scale(1); } 50% { opacity: 1; transform: scale(1.4); } }
+@keyframes ls-pop { 0%, 100% { opacity: 0.6; transform: scale(0.97); } 50% { opacity: 1; transform: scale(1); } }
+@keyframes ls-drift { 0% { transform: translate(0, 0); } 50% { transform: translate(10px, -8px); } 100% { transform: translate(0, 0); } }
+@media (prefers-reduced-motion: reduce) {
+  .ls-root *, .ls-root { animation: none !important; }
+}

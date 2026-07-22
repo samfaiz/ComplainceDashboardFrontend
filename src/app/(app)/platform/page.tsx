@@ -3,13 +3,23 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { Building2, Plus, LogIn, Ban, CheckCircle2, Trash2 } from "lucide-react";
+import { Building2, Plus, LogIn, Ban, CheckCircle2, Trash2, Inbox, UserPlus, Mail } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/lib/toast";
-import { usePlatformOrgs } from "@/lib/queries";
+import { usePlatformOrgs, useSignupRequests, usePlatformMailSettings } from "@/lib/queries";
 import { formatDate } from "@/lib/format";
-import type { Organization } from "@/lib/types";
+import type { Organization, SignupRequest, PlatformMailSettings } from "@/lib/types";
+import { PlatformMailDialog } from "@/components/platform-mail-dialog";
+
+type OrgPrefill = { name?: string; adminName?: string; adminEmail?: string };
+
+const REQUEST_TYPE_LABEL: Record<SignupRequest["account_type"], string> = {
+  organization: "Organization",
+  mssp: "MSSP",
+  individual: "Individual",
+  other: "Other",
+};
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,13 +33,18 @@ import { Dialog, DialogHeader } from "@/components/ui/dialog";
 export default function PlatformPage() {
   const router = useRouter();
   const { user, isLoading } = useAuth();
-  const [createOpen, setCreateOpen] = useState(false);
+  // null = dialog closed; an (even empty) object = open, seeded with those values.
+  const [createPrefill, setCreatePrefill] = useState<OrgPrefill | null>(null);
+  const [mailOpen, setMailOpen] = useState(false);
 
   useEffect(() => {
     if (!isLoading && user && !user.is_platform_owner) router.replace("/dashboard");
   }, [isLoading, user, router]);
 
-  const { data: orgs, isLoading: orgsLoading } = usePlatformOrgs(!!user?.is_platform_owner);
+  const enabled = !!user?.is_platform_owner;
+  const { data: orgs, isLoading: orgsLoading } = usePlatformOrgs(enabled);
+  const { data: requests, isLoading: reqLoading } = useSignupRequests(enabled);
+  const { data: mail } = usePlatformMailSettings(enabled);
 
   if (!user?.is_platform_owner) return null;
 
@@ -39,7 +54,7 @@ export default function PlatformPage() {
         title="Platform"
         description="Create and manage organizations. Each one is fully isolated from the others."
       >
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
+        <Button size="sm" onClick={() => setCreatePrefill({})}>
           <Plus className="h-4 w-4" /> New organization
         </Button>
       </PageHeader>
@@ -76,8 +91,132 @@ export default function PlatformPage() {
         </CardContent>
       </Card>
 
-      {createOpen && <CreateOrgDialog onClose={() => setCreateOpen(false)} />}
+      <EmailIntegration mail={mail} onConfigure={() => setMailOpen(true)} />
+
+      <AccountRequests
+        requests={requests}
+        loading={reqLoading}
+        onProvision={(r) =>
+          setCreatePrefill({ name: r.organization ?? "", adminName: r.name, adminEmail: r.email })
+        }
+      />
+
+      {createPrefill && <CreateOrgDialog prefill={createPrefill} onClose={() => setCreatePrefill(null)} />}
+      {mailOpen && mail && <PlatformMailDialog settings={mail} onClose={() => setMailOpen(false)} />}
     </div>
+  );
+}
+
+// Platform email integration: where account-request notifications are sent, and
+// whether SMTP is connected. Full config lives in the dialog.
+function EmailIntegration({
+  mail,
+  onConfigure,
+}: {
+  mail: PlatformMailSettings | undefined;
+  onConfigure: () => void;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-5">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Mail className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold">Email notifications</h2>
+              {mail ? (
+                <Badge variant={mail.enabled ? "success" : "secondary"}>
+                  {mail.enabled ? "SMTP on" : "Log only"}
+                </Badge>
+              ) : null}
+            </div>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {mail?.notify_email
+                ? <>New account requests are emailed to <span className="font-medium text-foreground">{mail.notify_email}</span>.</>
+                : "Set an address to be emailed when someone requests an account."}
+            </p>
+          </div>
+        </div>
+        <Button size="sm" variant="outline" onClick={onConfigure} disabled={!mail}>
+          Configure
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Incoming "Contact an admin for an account" requests. Read-only, with a shortcut
+// that opens the New-organization dialog pre-filled from the request.
+function AccountRequests({
+  requests,
+  loading,
+  onProvision,
+}: {
+  requests: SignupRequest[] | undefined;
+  loading: boolean;
+  onProvision: (r: SignupRequest) => void;
+}) {
+  return (
+    <Card>
+      <CardContent className="pt-5">
+        <div className="mb-4 flex items-center gap-2">
+          <Inbox className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold">Account requests</h2>
+          {requests?.length ? <Badge variant="secondary">{requests.length}</Badge> : null}
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <span className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        ) : !requests?.length ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            No account requests yet. When someone uses &ldquo;Contact an admin for an account&rdquo; on the
+            sign-in page, it lands here.
+          </p>
+        ) : (
+          <Table>
+            <THead>
+              <TR>
+                <TH>Requester</TH>
+                <TH>Type</TH>
+                <TH>Organization</TH>
+                <TH>Message</TH>
+                <TH>When</TH>
+                <TH className="text-right">Action</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {requests.map((r) => (
+                <TR key={r.id}>
+                  <TD>
+                    <div className="font-medium">{r.name}</div>
+                    <a href={`mailto:${r.email}`} className="text-xs text-primary hover:underline">
+                      {r.email}
+                    </a>
+                  </TD>
+                  <TD>
+                    <Badge variant="outline">{REQUEST_TYPE_LABEL[r.account_type]}</Badge>
+                  </TD>
+                  <TD className="text-muted-foreground">{r.organization || "—"}</TD>
+                  <TD className="max-w-xs">
+                    <span className="line-clamp-2 text-sm text-muted-foreground">{r.message || "—"}</span>
+                  </TD>
+                  <TD className="whitespace-nowrap text-muted-foreground">{formatDate(r.created_at)}</TD>
+                  <TD className="text-right">
+                    <Button size="sm" variant="outline" onClick={() => onProvision(r)}>
+                      <UserPlus className="h-3.5 w-3.5" /> Provision
+                    </Button>
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -160,12 +299,12 @@ function OrgRow({ org }: { org: Organization }) {
   );
 }
 
-function CreateOrgDialog({ onClose }: { onClose: () => void }) {
+function CreateOrgDialog({ prefill, onClose }: { prefill: OrgPrefill; onClose: () => void }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [name, setName] = useState("");
-  const [adminName, setAdminName] = useState("");
-  const [adminEmail, setAdminEmail] = useState("");
+  const [name, setName] = useState(prefill.name ?? "");
+  const [adminName, setAdminName] = useState(prefill.adminName ?? "");
+  const [adminEmail, setAdminEmail] = useState(prefill.adminEmail ?? "");
   const [adminPassword, setAdminPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
